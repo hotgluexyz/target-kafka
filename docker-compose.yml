@@ -1,0 +1,14 @@
+services:
+  kafka:
+    image: confluentinc/confluent-local:8.2.0
+    container_name: kafka-local
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      # Make the broker advertise `localhost:9092` so clients on the host
+      # (e.g. `target-kafka` running outside the container) can reach it.
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
