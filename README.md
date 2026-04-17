@@ -47,8 +47,6 @@ Sane defaults are applied on top of librdkafka: `acks=all` and `enable.idempoten
 }
 ```
 
-See [`.secrets/config.confluent.sample.json`](./.secrets/config.confluent.sample.json).
-
 ### Local development (docker-compose)
 
 A single-node Confluent broker is included for local testing:
@@ -71,9 +69,6 @@ Then point the target at `localhost:9092` using [`.secrets/config.local.sample.j
 ```bash
 poetry run target-kafka --version
 poetry run target-kafka --help
-
-# Pipe a tap (or a hand-written Singer stream) into the target.
-cat .secrets/sample_input.jsonl | poetry run target-kafka --config .secrets/config.local.sample.json
 ```
 
 Verify messages landed on the broker (local):
@@ -87,4 +82,4 @@ docker exec -it kafka-local \
 
 Given a Singer record with `stream = "users"` and no overrides, the target produces to topic `users`. With `topic_prefix = "prod."`, the topic becomes `prod.users`. With `stream_topic_map = {"users": "prod.users.v1"}`, the topic becomes `prod.users.v1` (overrides win over the prefix).
 
-Topics are **not** auto-created by the target itself — it relies on broker-side auto-creation (`auto.create.topics.enable=true`, which the included `docker-compose.yml` enables, and which is the default on Confluent Cloud for basic clusters). Pre-create topics explicitly for production use.
+Topics are **not** auto-created by the target itself - it relies on broker-side auto-creation (`auto.create.topics.enable=true`, which the included `docker-compose.yml` enables, and which is the default on Confluent Cloud for basic clusters). Pre-create topics explicitly for production use.
