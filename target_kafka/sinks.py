@@ -48,11 +48,8 @@ class KafkaSink(HotglueBatchSink):
         prefix = self.config.get("topic_prefix") or ""
         return f"{prefix}{self.stream_name}"
 
-    def preprocess_record(self, record: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-        return record
-
     def make_batch_request(self, records: List[Dict[str, Any]]) -> Dict[str, Any]:
-        return records
+        pass
 
     def process_record(self, record: Dict[str, Any], context: Dict[str, Any]) -> None:
         """Produce a single record to Kafka and bookmark it in state.
