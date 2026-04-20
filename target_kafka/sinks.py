@@ -66,16 +66,15 @@ class KafkaSink(HotglueBatchSink):
             self.init_state()
 
         value = json.dumps(record, cls=_JSONEncoder).encode("utf-8")
-        key = self._record_id(record)
+        record_id = self._record_id(record)
 
         self._target.kafka_client.produce(
             topic=self.topic,
             value=value,
-            key=key,
+            key=record_id.encode("utf-8") if record_id is not None else None,
         )
 
         state: Dict[str, Any] = {"success": True}
-        record_id = self._record_id(record)
         if record_id is not None:
             state["id"] = record_id
         self.update_state(state, record=record)
