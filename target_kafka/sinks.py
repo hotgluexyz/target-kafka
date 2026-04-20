@@ -8,9 +8,7 @@ import json
 import uuid
 from typing import Any, Dict, List, Optional
 
-from singer_sdk.plugin_base import PluginBase
-from hotglue_singer_sdk.target_sdk.sinks import HotglueSink
-
+from hotglue_singer_sdk.target_sdk.client import HotglueBatchSink
 
 class _JSONEncoder(json.JSONEncoder):
     """JSON encoder that handles datetimes, decimals and UUIDs."""
@@ -27,7 +25,7 @@ class _JSONEncoder(json.JSONEncoder):
         return super().default(o)
 
 
-class KafkaSink(HotglueSink):
+class KafkaSink(HotglueBatchSink):
     """Generic Kafka sink that forwards any stream to a Kafka topic.
 
     The topic name is `stream_name` by default, optionally prefixed via
@@ -35,24 +33,8 @@ class KafkaSink(HotglueSink):
     Message keys are derived from the schema's `key_properties` so that
     related records land on the same partition.
     """
-
-    # Required by TargetHotglue._process_record_message even though we don't
-    # use the Hotglue REST plumbing.
-    allows_externalid: List[str] = []
-    latest_state: Optional[Dict[str, Any]] = None
-
     # Flush per state-drain boundary instead of hoarding megabytes in memory.
     max_size = 1000
-
-    def __init__(
-        self,
-        target: PluginBase,
-        stream_name: str,
-        schema: Dict[str, Any],
-        key_properties: Optional[List[str]],
-    ) -> None:
-        self._target = target
-        super().__init__(target, stream_name, schema, key_properties)
 
     @property
     def name(self) -> str:
@@ -69,11 +51,22 @@ class KafkaSink(HotglueSink):
     def preprocess_record(self, record: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         return record
 
+    def make_batch_request(self, records: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return records
+
     def process_record(self, record: Dict[str, Any], context: Dict[str, Any]) -> None:
-        """Produce a single record to Kafka. No local batching: Kafka's
-        internal queue already handles batching/linger efficiently."""
+        """Produce a single record to Kafka and bookmark it in state.
+
+        Kafka's internal queue already handles batching/linger, so we don't
+        buffer records locally. Success is optimistic: any broker-side failure
+        will surface when `process_batch` calls `flush()` at the drain
+        boundary.
+        """
+        if not self.latest_state:
+            self.init_state()
+
         value = json.dumps(record, cls=_JSONEncoder).encode("utf-8")
-        key = self._build_key(record)
+        key = self._record_id(record)
 
         self._target.kafka_client.produce(
             topic=self.topic,
@@ -81,14 +74,19 @@ class KafkaSink(HotglueSink):
             key=key,
         )
 
+        state: Dict[str, Any] = {"success": True}
+        record_id = self._record_id(record)
+        if record_id is not None:
+            state["id"] = record_id
+        self.update_state(state, record=record)
+
     def process_batch(self, context: Dict[str, Any]) -> None:
         """Called at drain boundaries (state messages, shutdown). Flush so the
         target never acknowledges state before messages are on the broker."""
         timeout = float(self.config.get("flush_timeout", 30))
         self._target.kafka_client.flush(timeout=timeout)
 
-    def _build_key(self, record: Dict[str, Any]) -> Optional[bytes]:
+    def _record_id(self, record: Dict[str, Any]) -> Optional[str]:
         if not self.key_properties:
             return None
-        parts = [str(record.get(k, "")) for k in self.key_properties]
-        return "|".join(parts).encode("utf-8")
+        return "|".join(str(record.get(k, "")) for k in self.key_properties)
