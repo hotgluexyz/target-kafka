@@ -55,6 +55,24 @@ A single-node Confluent broker is included for local testing:
 docker compose up -d
 ```
 
+Create the `users` topic (optional if doesn't exist already):
+
+```bash
+docker exec -it kafka-local \
+  kafka-topics --bootstrap-server localhost:9092 \
+               --create --topic users \
+               --partitions 1 --replication-factor 1
+```
+
+Or, if you prefer an interactive shell inside the container:
+
+```bash
+docker exec -it kafka-local bash
+kafka-topics --bootstrap-server localhost:9092 --create --topic users --partitions 1 --replication-factor 1
+kafka-topics --bootstrap-server localhost:9092 --list
+kafka-topics --bootstrap-server localhost:9092 --describe --topic users
+```
+
 Then point the target at `localhost:9092` using [`.secrets/config.local.sample.json`](./.secrets/config.local.sample.json):
 
 ```json
