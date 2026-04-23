@@ -84,7 +84,9 @@ class KafkaProducerClient:
     @property
     def admin_client(self) -> AdminClient:
         if self._admin_client is None:
-            self._admin_client = AdminClient(build_connection_config(self._config))
+            with self._lock:
+                if self._admin_client is None:
+                    self._admin_client = AdminClient(build_connection_config(self._config))
         return self._admin_client
 
     def create_topic_if_not_exists(
@@ -93,7 +95,7 @@ class KafkaProducerClient:
         if topic in self._topic_checked:
             return
         topic_metadata = self.admin_client.list_topics(timeout=timeout).topics.get(topic)
-        if topic_metadata is None or topic_metadata.error is not None:
+        if topic_metadata is None:
             logger.info(f"Creating topic {topic}")
             future = self.admin_client.create_topics(
                 [NewTopic(topic, num_partitions=num_partitions, replication_factor=replication_factor)]
