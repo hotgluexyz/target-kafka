@@ -4,12 +4,31 @@ from __future__ import annotations
 
 import logging
 from threading import Lock
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 from confluent_kafka import Producer
+from confluent_kafka.admin import AdminClient, NewTopic
 
 
 logger = logging.getLogger(__name__)
+
+
+def build_connection_config(config: Dict[str, Any]) -> Dict[str, Any]:
+    connection_conf: Dict[str, Any] = {"bootstrap.servers": config["bootstrap_servers"]}
+    security_protocol = config.get("security_protocol")
+    sasl_username = config.get("sasl_username")
+    sasl_password = config.get("sasl_password")
+    if sasl_username and sasl_password and not security_protocol:
+        security_protocol = "SASL_SSL"
+    if security_protocol:
+        connection_conf["security.protocol"] = security_protocol
+    if security_protocol and str(security_protocol).startswith("SASL"):
+        connection_conf["sasl.mechanisms"] = config.get("sasl_mechanism", "PLAIN")
+        if sasl_username:
+            connection_conf["sasl.username"] = sasl_username
+        if sasl_password:
+            connection_conf["sasl.password"] = sasl_password
+    return connection_conf
 
 
 def build_producer_config(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -20,32 +39,14 @@ def build_producer_config(config: Dict[str, Any]) -> Dict[str, Any]:
     override any librdkafka setting (e.g. `compression.type`, `linger.ms`,
     `acks`, TLS overrides, etc.).
     """
-    producer_conf: Dict[str, Any] = {
-        "bootstrap.servers": config["bootstrap_servers"],
-        "client.id": config.get("client_id", "target-kafka"),
-        # Safer defaults for at-least-once delivery to Confluent Cloud.
-        "acks": "all",
-        "enable.idempotence": True,
-    }
-
-    security_protocol = config.get("security_protocol")
-    sasl_username = config.get("sasl_username")
-    sasl_password = config.get("sasl_password")
-
-    # Confluent Cloud auto-config: if API key / secret are provided and no
-    # explicit security protocol was set, assume the usual SASL_SSL + PLAIN.
-    if sasl_username and sasl_password and not security_protocol:
-        security_protocol = "SASL_SSL"
-
-    if security_protocol:
-        producer_conf["security.protocol"] = security_protocol
-
-    if security_protocol and security_protocol.startswith("SASL"):
-        producer_conf["sasl.mechanisms"] = config.get("sasl_mechanism", "PLAIN")
-        if sasl_username:
-            producer_conf["sasl.username"] = sasl_username
-        if sasl_password:
-            producer_conf["sasl.password"] = sasl_password
+    producer_conf = build_connection_config(config)
+    producer_conf.update(
+        {
+            "client.id": config.get("client_id", "target-kafka"),
+            "acks": "all",
+            "enable.idempotence": True,
+        }
+    )
 
     extra = config.get("extra_producer_config") or {}
     if not isinstance(extra, dict):
@@ -61,8 +62,10 @@ class KafkaProducerClient:
     def __init__(self, config: Dict[str, Any]) -> None:
         self._config = config
         self._producer: Optional[Producer] = None
+        self._admin_client: Optional[AdminClient] = None
         self._lock = Lock()
         self._delivery_error: Optional[str] = None
+        self._topic_checked: Set[str] = set()
 
     @property
     def producer(self) -> Producer:
@@ -77,6 +80,28 @@ class KafkaProducerClient:
                     logger.info("Initializing Kafka producer with config: %s", safe_conf)
                     self._producer = Producer(producer_conf)
         return self._producer
+
+    @property
+    def admin_client(self) -> AdminClient:
+        if self._admin_client is None:
+            with self._lock:
+                if self._admin_client is None:
+                    self._admin_client = AdminClient(build_connection_config(self._config))
+        return self._admin_client
+
+    def create_topic_if_not_exists(
+        self, topic: str, num_partitions: int = 1, replication_factor: int = 1, timeout: float = 10
+    ) -> None:
+        if topic in self._topic_checked:
+            return
+        topic_metadata = self.admin_client.list_topics(timeout=timeout).topics.get(topic)
+        if topic_metadata is None or topic_metadata.error is not None:
+            logger.info(f"Creating topic {topic}")
+            future = self.admin_client.create_topics(
+                [NewTopic(topic, num_partitions=num_partitions, replication_factor=replication_factor)]
+            )[topic]
+            future.result(timeout=timeout)
+        self._topic_checked.add(topic)
 
     def produce(
         self,
