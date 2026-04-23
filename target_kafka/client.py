@@ -84,9 +84,7 @@ class KafkaProducerClient:
     @property
     def admin_client(self) -> AdminClient:
         if self._admin_client is None:
-            with self._lock:
-                if self._admin_client is None:
-                    self._admin_client = AdminClient(build_connection_config(self._config))
+            self._admin_client = AdminClient(build_connection_config(self._config))
         return self._admin_client
 
     def create_topic_if_not_exists(
