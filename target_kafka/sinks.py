@@ -61,7 +61,10 @@ class KafkaSink(HotglueBatchSink):
         """
         if not self.latest_state:
             self.init_state()
-        self._target.kafka_client.create_topic_if_not_exists(self.topic)
+        num_partitions = self.config.get("num_partitions")
+        replication_factor = self.config.get("replication_factor")
+
+        self._target.kafka_client.create_topic_if_not_exists(self.topic, num_partitions, replication_factor)
 
         value = json.dumps(record, cls=_JSONEncoder).encode("utf-8")
         record_id = self._record_id(record)

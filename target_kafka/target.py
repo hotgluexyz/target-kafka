@@ -109,6 +109,20 @@ class TargetKafka(TargetHotglue):
                 "Use dotted keys, e.g. `{\"compression.type\": \"lz4\", \"linger.ms\": 50}`."
             ),
         ),
+        th.Property(
+            "num_partitions",
+            th.NumberType,
+            required=False,
+            default=1,
+            description="Number of partitions to create for the topic.",
+        ),
+        th.Property(
+            "replication_factor",
+            th.NumberType,
+            required=False,
+            default=1,
+            description="Replication factor to create for the topic.",
+        ),
     ).to_dict()
 
     @property
