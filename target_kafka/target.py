@@ -111,14 +111,14 @@ class TargetKafka(TargetHotglue):
         ),
         th.Property(
             "num_partitions",
-            th.NumberType,
+            th.IntegerType,
             required=False,
             default=1,
             description="Number of partitions to create for the topic.",
         ),
         th.Property(
             "replication_factor",
-            th.NumberType,
+            th.IntegerType,
             required=False,
             default=1,
             description="Replication factor to create for the topic.",
