@@ -115,23 +115,19 @@ def build_producer_config(config: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def build_schema_registry_config(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Build SchemaRegistryClient config when `schema_registry_enabled` is true.
+    """Build SchemaRegistryClient config from the flattened target config.
 
-    Reads the flattened target config:
-      - ``schema_registry_url`` (required)
+      - ``schema_registry_url`` (required; its presence also enables SR serialization)
       - ``schema_registry_api_key`` / ``schema_registry_api_secret`` (optional;
         both must be provided together for HTTP basic auth).
     """
     url = config.get("schema_registry_url")
     if not url:
-        raise ValueError(
-            "`schema_registry_enabled` is true but `schema_registry_url` is not set."
-        )
+        raise ValueError("`schema_registry_url` is not set.")
     conf: Dict[str, Any] = {"url": url}
 
     api_key = config.get("schema_registry_api_key")
     api_secret = config.get("schema_registry_api_secret")
-    
     if bool(api_key) != bool(api_secret):
         raise ValueError(
             "`schema_registry_api_key` and `schema_registry_api_secret` must be "
@@ -179,7 +175,7 @@ class KafkaProducerClient:
 
     @property
     def schema_registry_enabled(self) -> bool:
-        return bool(self._config.get("schema_registry_enabled"))
+        return bool(self._config.get("schema_registry_url"))
 
     @property
     def schema_registry_client(self):

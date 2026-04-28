@@ -124,24 +124,15 @@ class TargetKafka(TargetHotglue):
             description="Replication factor to create for the topic.",
         ),
         th.Property(
-            "schema_registry_enabled",
-            th.BooleanType,
-            required=False,
-            default=False,
-            description=(
-                "When true, message values are serialized as JSON Schema via Confluent "
-                "Schema Registry (auto-registering the Singer stream schema on first use) "
-                "instead of being sent as raw JSON. Requires `schema_registry_url`."
-            ),
-        ),
-        th.Property(
             "schema_registry_url",
             th.StringType,
             required=False,
             description=(
                 "Schema Registry endpoint, e.g. "
                 "`https://psrc-xxxxx.us-east-2.aws.confluent.cloud`. "
-                "Required when `schema_registry_enabled` is true."
+                "When set, message values are serialized as JSON Schema via Confluent "
+                "Schema Registry (auto-registering the Singer stream schema on first use) "
+                "instead of being sent as raw JSON."
             ),
         ),
         th.Property(
