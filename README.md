@@ -25,6 +25,9 @@ poetry install
 | `client_id`             | No       | `target-kafka`                 | Kafka `client.id`.                                                                                    |
 | `flush_timeout`         | No       | `30`                           | Seconds to wait for in-flight messages at every drain / shutdown.                                     |
 | `extra_producer_config` | No       | `{}`                           | Arbitrary librdkafka producer settings to merge in last (e.g. `{"compression.type": "lz4"}`).         |
+| `schema_registry_url`   | No       | —                              | Schema Registry endpoint. When set, message values are serialized as JSON Schema via Confluent Schema Registry (see below). |
+| `schema_registry_api_key` | No     | -                              | Schema Registry API key for HTTP basic auth. Must be paired with `schema_registry_api_secret`.         |
+| `schema_registry_api_secret` | No  | -                              | Schema Registry API secret for HTTP basic auth. Must be paired with `schema_registry_api_key`.         |
 
 Every record is produced with:
 
@@ -33,6 +36,40 @@ Every record is produced with:
 - **value** = the record JSON-encoded as UTF-8. Datetimes, decimals and UUIDs are serialized as strings.
 
 Sane defaults are applied on top of librdkafka: `acks=all` and `enable.idempotence=true` for at-least-once (actually exactly-once-per-producer-session) delivery.
+
+### Schema Registry
+
+Set `schema_registry_url` to publish message values in the
+[Confluent Schema Registry](https://docs.confluent.io/platform/current/schema-registry/index.html)
+**JSON Schema** wire format (`<magic byte 0x00><big-endian uint32 schema id><JSON body>`).
+SR serialization is enabled purely by the presence of this URL.
+Each Singer stream's own schema is auto-registered on first use under the default
+`TopicNameStrategy` subject (`<topic>-value`), and the resulting schema id is cached
+for the lifetime of the target. Keys are still produced as plain UTF-8 strings.
+
+> Records are encoded as UTF-8 JSON against the registered schema but are **not**
+> client-side validated, so the target is compatible with toolchains that pin older
+> versions of `jsonschema` (e.g. `pipelinewise-singer-python`). Downstream consumers
+> that use Schema Registry serializers will still validate against the registered
+> schema on read.
+
+`schema_registry_api_key` and `schema_registry_api_secret` must be provided together;
+when both are set the target uses them for HTTP basic auth against Schema Registry.
+If neither is set, requests are made unauthenticated.
+
+#### Example
+
+```json
+{
+  "bootstrap_servers": "pkc-xxxxx.us-east-1.aws.confluent.cloud:9092",
+  "security_protocol": "SASL_SSL",
+  "sasl_username": "YOUR_KAFKA_API_KEY",
+  "sasl_password": "YOUR_KAFKA_API_SECRET",
+  "schema_registry_url": "https://psrc-xxxxx.us-east-2.aws.confluent.cloud",
+  "schema_registry_api_key": "YOUR_SR_API_KEY",
+  "schema_registry_api_secret": "YOUR_SR_API_SECRET"
+}
+```
 
 ### Confluent Cloud example
 

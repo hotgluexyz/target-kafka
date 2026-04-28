@@ -25,6 +25,12 @@ class _JSONEncoder(json.JSONEncoder):
         return super().default(o)
 
 
+def _normalize_record(record: Dict[str, Any], _ctx: Any = None) -> Dict[str, Any]:
+    """Round-trip a record through `_JSONEncoder` so SR serializers receive
+    only JSON-native types (datetimes/decimals/UUIDs become strings)."""
+    return json.loads(json.dumps(record, cls=_JSONEncoder))
+
+
 class KafkaSink(HotglueBatchSink):
     """Generic Kafka sink that forwards any stream to a Kafka topic.
 
@@ -51,6 +57,17 @@ class KafkaSink(HotglueBatchSink):
     def make_batch_request(self, records: List[Dict[str, Any]]) -> Dict[str, Any]:
         pass
 
+    def _encode_value(self, record: Dict[str, Any]) -> bytes:
+        if not self._target.kafka_client.schema_registry_enabled:
+            return json.dumps(record, cls=_JSONEncoder).encode("utf-8")
+
+        serializer = self._target.kafka_client.get_value_serializer(
+            topic=self.topic,
+            schema=self.schema,
+            to_dict=_normalize_record,
+        )
+        return serializer(record)
+
     def process_record(self, record: Dict[str, Any], context: Dict[str, Any]) -> None:
         """Produce a single record to Kafka and bookmark it in state.
 
@@ -66,7 +83,7 @@ class KafkaSink(HotglueBatchSink):
 
         self._target.kafka_client.create_topic_if_not_exists(self.topic, num_partitions, replication_factor)
 
-        value = json.dumps(record, cls=_JSONEncoder).encode("utf-8")
+        value = self._encode_value(record)
         record_id = self._record_id(record)
 
         self._target.kafka_client.produce(

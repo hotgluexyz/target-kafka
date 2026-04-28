@@ -15,7 +15,7 @@ packages = [{ include = "target_kafka" }]
 python = "<3.11,>=3.7.1"
 singer-sdk = "^0.9.0"
 hotglue-singer-sdk = "^1.0.3"
-confluent-kafka = "^2.14.0"
+confluent-kafka = {version = "^2.14.0", extras = ["schemaregistry"]}
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.5"
